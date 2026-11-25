@@ -442,6 +442,10 @@ The traceability matrix is printed after every run and written to
 - **live** (main, nightly, or manual): smoke on push; nightly the full BDD regression
   plus the page-object tests; serial; reports uploaded as artifacts.
 
+**Run workflow (manual):** Actions → ci → Run workflow. The quality job always runs; switch the other jobs on or
+off with `container`, `performance` (+ `blazedemo`) and `live`, and pick `live_suite` (smoke or regression).
+The cloud workflow (`cloud.yml`) has its own options: `suite` (offline, events, unit) and `device_farm`.
+
 ## Refreshing the offline catalogue
 
 `tests/data/catalogue_snapshot.json` is a trimmed copy of the live `/products.json`.

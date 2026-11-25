@@ -5,10 +5,27 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      container:
+        description: "Job: build the container image and run the offline suite in it"
+        type: boolean
+        default: true
+      performance:
+        description: "Job: JMeter load test on the local sandbox + SLA gate (about 8 minutes)"
+        type: boolean
+        default: true
       blazedemo:
         description: "Also run the light BlazeDemo load test (5 users, 2 minutes)"
         type: boolean
         default: false
+      live:
+        description: "Job: run against the live Shopify store"
+        type: boolean
+        default: true
+      live_suite:
+        description: "Live suite: smoke (smoke + p1 workflows) or regression (everything automated)"
+        type: choice
+        options: [smoke, regression]
+        default: smoke
   schedule:
     - cron: "17 3 * * *"   # nightly live regression, 03:17 UTC
 
@@ -62,6 +79,7 @@ jobs:
   container:
     name: Container image - build, run the offline suite read-only
     needs: quality
+    if: github.event_name != 'workflow_dispatch' || inputs.container
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -84,6 +102,7 @@ jobs:
   performance:
     name: Performance - sandbox smoke load + SLA gate
     needs: quality
+    if: github.event_name != 'workflow_dispatch' || inputs.performance
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -151,10 +170,10 @@ jobs:
           retention-days: 14
 
   live:
-    name: Live store (${{ github.event_name == 'schedule' && 'regression' || 'smoke' }})
+    name: Live store (${{ (github.event_name == 'schedule' || inputs.live_suite == 'regression') && 'regression' || 'smoke' }})
     needs: quality
     # Live runs hit a shared third-party site: only on main, on schedule, or on demand.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: (github.ref == 'refs/heads/main' && github.event_name != 'workflow_dispatch') || (github.event_name == 'workflow_dispatch' && inputs.live)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -167,9 +186,14 @@ jobs:
       - run: pip install -r requirements.txt
       - run: playwright install --with-deps chromium
       - name: "Run against the live store (serial on purpose: low load)"
-        run: >
-          pytest tests/test_*.py tests/e2e ${{ github.event_name == 'schedule' && 'tests/pages' || '' }}
-          -m "${{ github.event_name == 'schedule' && 'not manual' || 'smoke or p1' }}"
+        env:
+          LIVE_SUITE: ${{ (github.event_name == 'schedule' || inputs.live_suite == 'regression') && 'regression' || 'smoke' }}
+        run: |
+          if [ "$LIVE_SUITE" = regression ]; then
+            pytest tests/test_*.py tests/e2e tests/pages -m "not manual"
+          else
+            pytest tests/test_*.py tests/e2e -m "smoke or p1"
+          fi
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
