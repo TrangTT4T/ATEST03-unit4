@@ -1,0 +1,69 @@
+# Performance objectives, checked by: python -m framework.perf.gate <results.jtl> --profile <name>
+# (Unit 4, Days 14 and 16). Values are agreed numbers, not guesses: write down where each comes from.
+
+[defaults]
+min_samples = 20      # fewer samples than this proves nothing: the gate FAILS
+max_error_pct = 1.0
+
+# Local order-events sandbox (perf/orders_sandbox.jmx), CI smoke: 5 users, 30 s.
+[sandbox."POST /orders"]
+p95_ms = 200          # the front door only accepts: it must stay fast at any load
+max_error_pct = 0.0
+
+[sandbox."TX order completed"]
+p95_ms = 2000         # = REQ-13 consistency target (2 s from order to "shipped")
+max_error_pct = 0.0
+
+# BlazeDemo (perf/blazedemo_purchase.jmx), light load only (<= 10 users).
+[blazedemo."01 Home"]
+p95_ms = 1500
+min_samples = 10
+
+[blazedemo."02 Find flights"]
+p95_ms = 1500
+min_samples = 10
+
+[blazedemo."03 Choose flight"]
+p95_ms = 1500
+min_samples = 10
+
+[blazedemo."04 Purchase"]
+p95_ms = 2000
+min_samples = 10
+
+# Order-events sandbox, LOAD PROFILE (perf/orders_sandbox_profile.jmx, perf/workload.toml).
+# User-based objectives (what a customer feels) and technical ones (what the system sustains).
+# Judged on the STEADY STATE only, except checks marked window = "whole".
+[steady_state.sandbox_profile]
+skip_head_s = 20      # = rampup in perf/workload.toml (override with --skip-head for shorter runs)
+skip_tail_s = 20      # = rampdown
+thread_prefix = "Shoppers"   # the load thread group; set-up and tear-down samples are not load
+
+[sandbox_profile."J1 Place order and track"]
+p95_ms = 2000                 # user-based: REQ-13, the order is shipped within 2 s
+max_error_pct = 1.0
+min_throughput_per_s = 0.9    # technical: >= 75 % of the planned 1.2 journeys/s, or the test is invalid
+
+[sandbox_profile."J1.1 Submit order"]
+p95_ms = 200                  # user-based: the checkout button answers at once
+max_error_pct = 0.0
+
+[sandbox_profile."J2 Check order status"]
+p95_ms = 300                  # user-based: the status page (think time excluded)
+max_error_pct = 0.0
+min_throughput_per_s = 2.1    # technical: >= 75 % of the planned 2.8 journeys/s
+
+[sandbox_profile."prepare: test data ready"]
+window = "whole"              # preparation: the environment was valid and the data seeded
+min_samples = 1
+max_error_pct = 0.0
+
+[sandbox_profile."verify: GET /metrics"]
+window = "whole"              # clean-up check: no dead letters left behind
+min_samples = 1
+max_error_pct = 0.0
+
+[sandbox_profile."verify: run completed without abort"]
+window = "whole"              # the abort criterion never fired
+min_samples = 1
+max_error_pct = 0.0
